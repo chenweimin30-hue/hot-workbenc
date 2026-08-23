@@ -27,6 +27,7 @@ PROVIDERS = {
         "name": "微博",
         "endpoints": [
             ("https://v2.xxapi.cn/api/weibohot", "xxapi"),
+            ("https://uapis.cn/api/v1/misc/hotboard?type=weibo", "vvhan"),
             ("https://api.vvhan.com/api/hotlist?type=weiboHot", "vvhan"),
         ],
     },
@@ -34,27 +35,28 @@ PROVIDERS = {
         "name": "抖音",
         "endpoints": [
             ("https://v2.xxapi.cn/api/douyinhot", "xxapi_douyin"),
+            ("https://uapis.cn/api/v1/misc/hotboard?type=douyin", "vvhan"),
         ],
     },
     "baidu": {
         "name": "百度",
         "endpoints": [
             ("https://v2.xxapi.cn/api/baiduhot", "xxapi"),
-            ("https://api.vvhan.com/api/hotlist?type=baiduRD", "vvhan"),
+            ("https://uapis.cn/api/v1/misc/hotboard?type=baidu", "vvhan"),
         ],
     },
     "toutiao": {
         "name": "今日头条",
         "endpoints": [
+            ("https://uapis.cn/api/v1/misc/hotboard?type=toutiao", "vvhan"),
             ("https://v2.xxapi.cn/api/toutiaohot", "xxapi"),
-            ("https://api.vvhan.com/api/hotlist?type=toutiao", "vvhan"),
         ],
     },
     "zhihu": {
         "name": "知乎",
         "endpoints": [
+            ("https://uapis.cn/api/v1/misc/hotboard?type=zhihu", "vvhan"),
             ("https://api.vvhan.com/api/hotlist?type=zhihuHot", "vvhan"),
-            ("https://v2.xxapi.cn/api/zhihuhot", "xxapi"),
         ],
     },
 }
