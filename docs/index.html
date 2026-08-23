@@ -315,9 +315,11 @@
     }
 
     function renderList() {
-      let items = hotData.items || [];
-      if (currentSource !== "all") items = items.filter(i => i.source === currentSource);
-      if (currentCat !== "all") items = items.filter(i => i.category === currentCat);
+     let items = hotData.items || [];
+if (currentSource !== "all") items = items.filter(i => i.source === currentSource);
+if (currentCat !== "all") items = items.filter(i => i.category === currentCat);
+// 不展示「其他」类
+items = items.filter(i => i.category !== "其他");
 
       if (!items.length) {
         document.getElementById("hotList").innerHTML = `<div class="empty-state"><div class="emoji">🔍</div>当前筛选下暂无热点</div>`;
