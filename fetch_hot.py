@@ -1,137 +1,333 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-自媒体热点工作台 - 热点抓取 + 自动分类脚本
-使用 Python 标准库，无需额外依赖。
-数据源：https://api-hot.imsyy.top （免费公开接口，无需 Key）
+自媒体热点工作台 - 热点抓取 + 自动分类（v3）
+改用在 GitHub Actions（海外）可访问的免费接口。
 """
 
+from __future__ import annotations
+
 import json
+import re
+import time
 import urllib.request
-import urllib.error
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
-# ==================== 配置 ====================
-API_BASE = "https://api-hot.imsyy.top"
-SOURCES = {
-    "weibo": "微博",
-    "douyin": "抖音",
-    "zhihu": "知乎",
-    "toutiao": "今日头条",
-}
-# 每个平台取前 N 条
 TOP_N = 15
-
-# 分类关键词规则（优先级从高到低）
-CATEGORY_RULES = [
-    ("情感", ["分手", "复合", "恋爱", "结婚", "离婚", "出轨", "相亲", "单身", "情侣", "表白", "渣男", "渣女", "恋爱脑", "感情", "暧昧", "暗恋", "相亲角", "婚恋"]),
-    ("娱乐", ["明星", "综艺", "电影", "电视剧", "演员", "歌手", "偶像", "粉丝", "演唱会", "流量", "顶流", "出道", "退圈", "塌房", "恋情", "绯闻", "官宣", "代言", "综艺节目", "选秀"]),
-    ("科技", ["AI", "人工智能", "芯片", "华为", "苹果", "特斯拉", "太空", "火箭", "5G", "6G", "手机", "电脑", "机器人", "自动驾驶", "元宇宙", "ChatGPT", "大模型", "芯片制裁", "半导体", "量子"]),
-    ("财经", ["股票", "基金", "房价", "楼市", "经济", "GDP", "通胀", "降息", "加息", "理财", "银行", "融资", "上市", "破产", "裁员", "薪资", "物价", "消费", "投资", "创业板", "A股"]),
-    ("时政", ["政府", "政策", "两会", "外交", "军事", "国防", "主席", "总理", "人大", "政协", "制裁", "战争", "冲突", "国际", "联合国", "峰会", "法规", "立法"]),
-    ("民生", ["教育", "医疗", "养老", "社保", "就业", "高考", "中考", "物价", "菜价", "地铁", "公交", "停电", "停水", "疫情", "疫苗", "医院", "学校", "幼儿园", "养老金", "医保"]),
-    ("搞笑", ["沙雕", "整活", "笑死", "社死", "迷惑", "离谱", "神操作", "名场面", "鬼畜", "段子", "表情包", "整蛊", "翻车", "迷惑行为"]),
-    ("社会", ["车祸", "火灾", "地震", "救人", "警察", "法院", "判决", "犯罪", "盗窃", "诈骗", "失踪", "遇害", "坠亡", "纠纷", "维权", "上热搜"]),
-]
-
-DEFAULT_CATEGORY = "其他"
-
-# 北京时区
+TIMEOUT = 15
 BEIJING = timezone(timedelta(hours=8))
 
+# 每个平台可尝试多条链路（按优先级）
+# parser: 用于解析不同返回格式
+PROVIDERS = {
+    "weibo": {
+        "name": "微博",
+        "endpoints": [
+            ("https://v2.xxapi.cn/api/weibohot", "xxapi"),
+            ("https://api.vvhan.com/api/hotlist?type=weiboHot", "vvhan"),
+        ],
+    },
+    "douyin": {
+        "name": "抖音",
+        "endpoints": [
+            ("https://v2.xxapi.cn/api/douyinhot", "xxapi_douyin"),
+        ],
+    },
+    "baidu": {
+        "name": "百度",
+        "endpoints": [
+            ("https://v2.xxapi.cn/api/baiduhot", "xxapi"),
+            ("https://api.vvhan.com/api/hotlist?type=baiduRD", "vvhan"),
+        ],
+    },
+    "toutiao": {
+        "name": "今日头条",
+        "endpoints": [
+            ("https://v2.xxapi.cn/api/toutiaohot", "xxapi"),
+            ("https://api.vvhan.com/api/hotlist?type=toutiao", "vvhan"),
+        ],
+    },
+    "zhihu": {
+        "name": "知乎",
+        "endpoints": [
+            ("https://api.vvhan.com/api/hotlist?type=zhihuHot", "vvhan"),
+            ("https://v2.xxapi.cn/api/zhihuhot", "xxapi"),
+        ],
+    },
+}
 
-def fetch_source(source_key: str) -> list:
-    """抓取单个平台热榜，返回标准化列表"""
-    url = f"{API_BASE}/{source_key}"
+CATEGORY_RULES = [
+    ("情感", ["分手", "复合", "恋爱", "结婚", "离婚", "出轨", "相亲", "单身", "情侣", "表白", "渣男", "渣女", "恋爱脑", "感情", "暧昧", "暗恋", "婚恋", "小三", "挽回", "冷战", "异地恋", "彩礼", "婆媳"]),
+    ("娱乐", ["明星", "综艺", "电影", "电视剧", "演员", "歌手", "偶像", "粉丝", "演唱会", "流量", "顶流", "出道", "退圈", "塌房", "绯闻", "官宣", "代言", "选秀", "爱豆", "追剧", "爆剧", "开播", "杀青", "内娱", "吃瓜", "热播"]),
+    ("科技", ["AI", "人工智能", "芯片", "华为", "苹果", "特斯拉", "太空", "火箭", "5G", "6G", "手机", "电脑", "机器人", "自动驾驶", "元宇宙", "ChatGPT", "大模型", "半导体", "量子", "OpenAI", "英伟达", "显卡", "折叠屏"]),
+    ("财经", ["股票", "基金", "房价", "楼市", "经济", "GDP", "通胀", "降息", "加息", "理财", "银行", "融资", "上市", "破产", "裁员", "薪资", "消费", "投资", "A股", "美联储", "汇率", "金价", "油价", "财报"]),
+    ("时政", ["政府", "政策", "两会", "外交", "军事", "国防", "主席", "总理", "人大", "政协", "制裁", "战争", "冲突", "国际", "联合国", "峰会", "法规", "立法", "中央", "国务院", "外交部"]),
+    ("民生", ["教育", "医疗", "养老", "社保", "就业", "高考", "中考", "菜价", "地铁", "公交", "停电", "停水", "疫情", "疫苗", "医院", "学校", "幼儿园", "养老金", "医保", "房租", "外卖", "快递"]),
+    ("搞笑", ["沙雕", "整活", "笑死", "社死", "迷惑", "离谱", "神操作", "名场面", "鬼畜", "段子", "表情包", "整蛊", "翻车", "迷惑行为", "硬核"]),
+    ("社会", ["车祸", "火灾", "地震", "救人", "警察", "法院", "判决", "犯罪", "盗窃", "诈骗", "失踪", "遇害", "坠亡", "纠纷", "维权", "事故", "爆料", "溺水", "打架", "通缉"]),
+]
+DEFAULT_CATEGORY = "其他"
+
+
+def http_get_json(url: str):
     try:
         req = urllib.request.Request(
             url,
             headers={
-                "User-Agent": "Mozilla/5.0 (compatible; HotWorkbench/1.0)",
-                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
             },
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+            return json.loads(raw)
     except Exception as e:
-        print(f"[WARN] 抓取 {source_key} 失败: {e}")
-        return []
+        print("    请求失败 %s: %s" % (url[:60], e))
+        return None
 
-    if data.get("code") != 200:
-        print(f"[WARN] {source_key} 返回异常: {data.get('message')}")
-        return []
 
+def clean_title(title: str) -> str:
+    if not title:
+        return ""
+    t = str(title).strip()
+    t = re.sub(r"^#+\s*", "", t)
+    t = re.sub(r"\s*#+$", "", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def parse_xxapi(data, source_key: str) -> list:
+    """v2.xxapi.cn 通用格式: {code:200, data:[{title,hot,url,index},...]}"""
+    if not data or data.get("code") != 200:
+        return []
     items = []
-    for idx, item in enumerate(data.get("data", [])[:TOP_N], 1):
-        title = item.get("title") or item.get("name") or ""
+    for idx, row in enumerate(data.get("data") or [], 1):
+        if idx > TOP_N:
+            break
+        title = clean_title(row.get("title") or row.get("name") or "")
         if not title:
             continue
+        url = row.get("url") or row.get("link") or ""
+        hot = row.get("hot") or row.get("hot_value") or row.get("hotValue") or ""
         items.append({
-            "rank": idx,
-            "title": title.strip(),
-            "desc": (item.get("desc") or item.get("description") or "").strip(),
-            "url": item.get("url") or item.get("mobileUrl") or item.get("link") or "",
-            "hot": item.get("hot") or item.get("hotValue") or item.get("score") or "",
-            "pic": item.get("pic") or item.get("cover") or "",
+            "rank": row.get("index") or idx,
+            "title": title,
+            "desc": (row.get("desc") or "").strip(),
+            "url": url,
+            "hot": str(hot) if hot else "",
+            "pic": "",
             "source": source_key,
-            "source_name": SOURCES.get(source_key, source_key),
+            "source_name": PROVIDERS[source_key]["name"],
         })
     return items
 
 
+def parse_xxapi_douyin(data, source_key: str) -> list:
+    """抖音返回字段略有不同"""
+    if not data or data.get("code") != 200:
+        return []
+    items = []
+    for idx, row in enumerate(data.get("data") or [], 1):
+        if idx > TOP_N:
+            break
+        title = clean_title(
+            row.get("title")
+            or row.get("word")
+            or row.get("sentence")
+            or row.get("name")
+            or ""
+        )
+        if not title:
+            continue
+        hot = row.get("hot_value") or row.get("hot") or row.get("hotValue") or ""
+        url = row.get("url") or ("https://www.douyin.com/search/" + quote(title))
+        items.append({
+            "rank": idx,
+            "title": title,
+            "desc": "",
+            "url": url,
+            "hot": str(hot) if hot else "",
+            "pic": "",
+            "source": source_key,
+            "source_name": PROVIDERS[source_key]["name"],
+        })
+    return items
+
+
+def parse_vvhan(data, source_key: str) -> list:
+    """vvhan: {type, list:[{index,title,url,hot_value},...]} 或 data 字段"""
+    if not data:
+        return []
+    rows = data.get("list") or data.get("data") or []
+    if not isinstance(rows, list):
+        return []
+    items = []
+    for idx, row in enumerate(rows, 1):
+        if idx > TOP_N:
+            break
+        title = clean_title(row.get("title") or row.get("name") or "")
+        if not title:
+            continue
+        url = row.get("url") or row.get("mobilUrl") or row.get("link") or ""
+        hot = row.get("hot_value") or row.get("hot") or row.get("hotValue") or ""
+        items.append({
+            "rank": row.get("index") or idx,
+            "title": title,
+            "desc": (row.get("desc") or "").strip(),
+            "url": url,
+            "hot": str(hot) if hot else "",
+            "pic": "",
+            "source": source_key,
+            "source_name": PROVIDERS[source_key]["name"],
+        })
+    return items
+
+
+PARSERS = {
+    "xxapi": parse_xxapi,
+    "xxapi_douyin": parse_xxapi_douyin,
+    "vvhan": parse_vvhan,
+}
+
+
+def ensure_url(item: dict) -> dict:
+    if item.get("url"):
+        return item
+    title = item["title"]
+    sk = item["source"]
+    if sk == "weibo":
+        item["url"] = "https://s.weibo.com/weibo?q=" + quote(title)
+    elif sk == "douyin":
+        item["url"] = "https://www.douyin.com/search/" + quote(title)
+    elif sk == "baidu":
+        item["url"] = "https://www.baidu.com/s?wd=" + quote(title)
+    elif sk == "zhihu":
+        item["url"] = "https://www.zhihu.com/search?q=" + quote(title)
+    elif sk == "toutiao":
+        item["url"] = "https://so.toutiao.com/search?keyword=" + quote(title)
+    return item
+
+
+def fetch_source(source_key: str) -> tuple:
+    cfg = PROVIDERS[source_key]
+    for url, parser_name in cfg["endpoints"]:
+        print("  → %s 尝试 %s ..." % (cfg["name"], url[:50]))
+        data = http_get_json(url)
+        parser = PARSERS.get(parser_name)
+        if not parser:
+            continue
+        items = parser(data, source_key)
+        if items:
+            items = [ensure_url(it) for it in items]
+            print("    成功 %d 条" % len(items))
+            return source_key, items
+        time.sleep(0.5)
+    print("  [WARN] %s 全部失败" % cfg["name"])
+    return source_key, []
+
+
 def classify(title: str, desc: str = "") -> str:
-    """根据关键词规则自动分类"""
     text = (title + " " + desc).lower()
-    for cat, keywords in CATEGORY_RULES:
-        for kw in keywords:
+    for cat, kws in CATEGORY_RULES:
+        for kw in kws:
             if kw.lower() in text:
                 return cat
     return DEFAULT_CATEGORY
 
 
+def deduplicate(items: list) -> list:
+    seen = set()
+    out = []
+    for it in items:
+        key = re.sub(r"[^\w\u4e00-\u9fff]", "", it["title"]).lower()
+        if len(key) < 4:
+            out.append(it)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(it)
+    return out
+
+
+def load_previous(path: Path):
+    try:
+        if path.exists():
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("total", 0) > 0 and data.get("items"):
+                return data
+    except Exception:
+        pass
+    return None
+
+
 def main():
-    print(f"[{datetime.now(BEIJING).strftime('%Y-%m-%d %H:%M:%S')}] 开始抓取热点...")
+    now = datetime.now(BEIJING)
+    print("[%s] 开始抓取（v3 多源）..." % now.strftime("%Y-%m-%d %H:%M:%S"))
 
-    all_items = []
-    for key in SOURCES:
-        print(f"  → 正在抓取 {SOURCES[key]} ...")
-        items = fetch_source(key)
-        for it in items:
-            it["category"] = classify(it["title"], it["desc"])
-        all_items.extend(items)
-        print(f"    得到 {len(items)} 条")
+    out_path = Path(__file__).parent / "docs" / "data.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 按平台分组，方便前端展示
     by_source = {}
-    for it in all_items:
-        src = it["source"]
-        if src not in by_source:
-            by_source[src] = []
-        by_source[src].append(it)
+    all_items = []
+    health = {"sources_ok": [], "sources_fail": []}
 
-    # 统计分类
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futs = {pool.submit(fetch_source, k): k for k in PROVIDERS}
+        for fut in as_completed(futs):
+            key, items = fut.result()
+            for it in items:
+                it["category"] = classify(it["title"], it.get("desc", ""))
+            by_source[key] = items
+            all_items.extend(items)
+            name = PROVIDERS[key]["name"]
+            if items:
+                health["sources_ok"].append(name)
+            else:
+                health["sources_fail"].append(name)
+
+    before = len(all_items)
+    all_items = deduplicate(all_items)
+    if before != len(all_items):
+        print("去重: %d → %d" % (before, len(all_items)))
+
+    if len(all_items) < 3:
+        prev = load_previous(out_path)
+        if prev and prev.get("total", 0) >= 3:
+            print("[FALLBACK] 使用上次成功数据")
+            prev["fallback"] = True
+            prev["health"] = health
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(prev, f, ensure_ascii=False, indent=2)
+            return
+
     cat_count = {}
     for it in all_items:
         cat_count[it["category"]] = cat_count.get(it["category"], 0) + 1
 
     result = {
-        "update_time": datetime.now(BEIJING).strftime("%Y-%m-%d %H:%M:%S"),
-        "update_timestamp": int(datetime.now(BEIJING).timestamp()),
+        "update_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "update_timestamp": int(now.timestamp()),
         "total": len(all_items),
         "category_stats": cat_count,
         "sources": by_source,
-        "items": all_items,  # 扁平列表，方便筛选
+        "items": all_items,
+        "fallback": False,
+        "health": health,
     }
 
-    # 写入 docs/data.json
-    out_path = Path(__file__).parent / "docs" / "data.json"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
-    print(f"[OK] 共抓取 {len(all_items)} 条热点，已写入 {out_path}")
-    print(f"     分类统计: {cat_count}")
+    print("[OK] 共 %d 条" % result["total"])
+    print("     成功: %s" % health["sources_ok"])
+    if health["sources_fail"]:
+        print("     失败: %s" % health["sources_fail"])
+    print("     分类: %s" % cat_count)
 
 
 if __name__ == "__main__":
