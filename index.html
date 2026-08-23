@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>热点工作台</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-hover: #334155;
+      --text: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --accent: #38bdf8;
+      --accent2: #a78bfa;
+      --danger: #f87171;
+      --success: #4ade80;
+      --border: #334155;
+      --radius: 12px;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100dvh;
+      padding-bottom: calc(64px + var(--safe-bottom));
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Header */
+    .header {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .header h1 { font-size: 18px; font-weight: 700; }
+    .header .update { font-size: 12px; color: var(--text-secondary); }
+    /* Tabs */
+    .tabs {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+      display: flex; background: rgba(15, 23, 42, 0.96);
+      border-top: 1px solid var(--border);
+      padding-bottom: var(--safe-bottom);
+    }
+    .tab {
+      flex: 1; text-align: center; padding: 10px 0 8px;
+      font-size: 12px; color: var(--text-secondary);
+      cursor: pointer; transition: color 0.2s;
+      -webkit-user-select: none; user-select: none;
+    }
+    .tab.active { color: var(--accent); }
+    .tab .icon { display: block; font-size: 20px; margin-bottom: 2px; }
+    /* Panels */
+    .panel { display: none; padding: 12px 12px 24px; }
+    .panel.active { display: block; }
+    /* Filters */
+    .filters {
+      display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px;
+      -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    .filters::-webkit-scrollbar { display: none; }
+    .filter-btn {
+      flex-shrink: 0; padding: 6px 14px; border-radius: 20px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-secondary); font-size: 13px; cursor: pointer;
+    }
+    .filter-btn.active { background: var(--accent); color: #0f172a; border-color: var(--accent); font-weight: 600; }
+    /* Cards */
+    .card {
+      background: var(--card); border-radius: var(--radius);
+      padding: 14px; margin-bottom: 10px;
+      border: 1px solid transparent; transition: border-color 0.15s;
+    }
+    .card:active { border-color: var(--accent); }
+    .card-top { display: flex; align-items: flex-start; gap: 10px; }
+    .rank {
+      flex-shrink: 0; width: 24px; height: 24px; border-radius: 6px;
+      background: var(--border); color: var(--text-secondary);
+      font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    }
+    .rank.top1 { background: #ef4444; color: #fff; }
+    .rank.top2 { background: #f97316; color: #fff; }
+    .rank.top3 { background: #eab308; color: #0f172a; }
+    .card-body { flex: 1; min-width: 0; }
+    .card-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+    .card-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 12px; color: var(--text-secondary); }
+    .badge {
+      display: inline-block; padding: 1px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 500;
+    }
+    .badge-社会 { background: #334155; color: #94a3b8; }
+    .badge-娱乐 { background: #4c1d95; color: #c4b5fd; }
+    .badge-情感 { background: #9d174d; color: #fbcfe8; }
+    .badge-科技 { background: #1e3a5f; color: #7dd3fc; }
+    .badge-财经 { background: #14532d; color: #86efac; }
+    .badge-时政 { background: #7c2d12; color: #fdba74; }
+    .badge-民生 { background: #164e63; color: #a5f3fc; }
+    .badge-搞笑 { background: #713f12; color: #fde68a; }
+    .badge-AI { background: #312e81; color: #a5b4fc; }
+    .badge-其他 { background: #1e293b; color: #64748b; }
+    .card-actions { margin-top: 10px; display: flex; gap: 8px; }
+    .btn {
+      flex: 1; padding: 8px 0; border-radius: 8px; border: none;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:active { opacity: 0.7; }
+    .btn-primary { background: var(--accent); color: #0f172a; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+    /* Copywriting panel */
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 10px 12px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--card);
+      color: var(--text); font-size: 14px; outline: none;
+    }
+    .form-group input:focus, .form-group textarea:focus { border-color: var(--accent); }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+    .result-box {
+      background: var(--card); border-radius: var(--radius);
+      padding: 14px; margin-top: 12px; white-space: pre-wrap;
+      font-size: 14px; line-height: 1.6; border: 1px solid var(--border);
+      min-height: 60px;
+    }
+    .result-box.empty { color: var(--text-secondary); }
+    .key-status { font-size: 12px; margin-top: 4px; }
+    .key-status.ok { color: var(--success); }
+    .key-status.no { color: var(--danger); }
+    /* Materials */
+    .material-item {
+      background: var(--card); border-radius: var(--radius);
+      padding: 12px; margin-bottom: 10px; position: relative;
+    }
+    .material-item .del {
+      position: absolute; top: 10px; right: 10px;
+      background: none; border: none; color: var(--danger);
+      font-size: 16px; cursor: pointer; padding: 4px;
+    }
+    .empty-state {
+      text-align: center; padding: 48px 20px; color: var(--text-secondary);
+    }
+    .empty-state .emoji { font-size: 40px; margin-bottom: 12px; }
+    /* Loading */
+    .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+    .spinner {
+      width: 28px; height: 28px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.7s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Toast */
+    .toast {
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      background: #334155; color: #fff; padding: 10px 20px;
+      border-radius: 8px; font-size: 14px; z-index: 200;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔥 热点工作台</h1>
+    <div class="update" id="updateTime">加载中...</div>
+  </div>
+
+  <!-- 雷达面板 -->
+  <div class="panel active" id="panel-radar">
+    <div class="filters" id="sourceFilters"></div>
+    <div class="filters" id="catFilters"></div>
+    <div id="hotList" class="loading"><div class="spinner"></div>正在加载热点...</div>
+  </div>
+
+  <!-- 文案面板 -->
+  <div class="panel" id="panel-copy">
+    <div class="form-group">
+      <label>DeepSeek API Key（仅保存在本机浏览器）</label>
+      <input type="password" id="apiKey" placeholder="sk-xxxxxxxx" autocomplete="off" />
+      <div class="key-status no" id="keyStatus">未填写 Key</div>
+    </div>
+    <div class="form-group">
+      <label>选择热点（或手动输入标题）</label>
+      <select id="topicSelect">
+        <option value="">-- 从今日热点选择 --</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>话题标题</label>
+      <input type="text" id="topicTitle" placeholder="输入或选择后自动填入" />
+    </div>
+    <div class="form-group">
+      <label>参考原文（可选，粘贴后强制完全重写，禁止照抄）</label>
+      <textarea id="refText" placeholder="粘贴参考内容，AI 会基于此改写成原创文案..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>目标平台</label>
+      <select id="platform">
+        <option value="all">三平台都生成</option>
+        <option value="toutiao">今日头条</option>
+        <option value="xiaohongshu">小红书</option>
+        <option value="douyin">抖音</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="genBtn" style="width:100%;padding:12px;font-size:15px;" onclick="generateCopy()">✨ 生成文案</button>
+    <div class="result-box empty" id="resultBox">生成结果会显示在这里</div>
+    <button class="btn btn-secondary" id="copyBtn" style="width:100%;margin-top:10px;display:none;" onclick="copyResult()">📋 复制全部</button>
+  </div>
+
+  <!-- 素材面板 -->
+  <div class="panel" id="panel-material">
+    <div class="form-group">
+      <label>话题 / 标题</label>
+      <input type="text" id="matTitle" placeholder="记录灵感或素材标题" />
+    </div>
+    <div class="form-group">
+      <label>链接 / 备注</label>
+      <textarea id="matNote" placeholder="链接、灵感点、拍摄想法..."></textarea>
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:12px;" onclick="addMaterial()">➕ 添加素材</button>
+    <div id="matList" style="margin-top:16px;"></div>
+  </div>
+
+  <!-- 底部导航 -->
+  <div class="tabs">
+    <div class="tab active" data-panel="radar" onclick="switchTab(this)">
+      <span class="icon">📡</span>雷达
+    </div>
+    <div class="tab" data-panel="copy" onclick="switchTab(this)">
+      <span class="icon">✍️</span>文案
+    </div>
+    <div class="tab" data-panel="material" onclick="switchTab(this)">
+      <span class="icon">🗂️</span>素材
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ========== 全局状态 ==========
+    let hotData = null;
+    let currentSource = "all";
+    let currentCat = "all";
+
+    // ========== 工具 ==========
+    function toast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 2000);
+    }
+
+    function switchTab(el) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+      el.classList.add("active");
+      document.getElementById("panel-" + el.dataset.panel).classList.add("active");
+    }
+
+    // ========== 雷达 ==========
+    async function loadHot() {
+      try {
+        const res = await fetch("./data.json?t=" + Date.now());
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        hotData = await res.json();
+        let ut = "更新于 " + (hotData.update_time || "未知");
+        if (hotData.fallback) ut += " · 兜底数据";
+        document.getElementById("updateTime").textContent = ut;
+        buildFilters();
+        renderList();
+        fillTopicSelect();
+      } catch (e) {
+        document.getElementById("hotList").innerHTML = `<div class="empty-state"><div class="emoji">😢</div>加载失败：${e.message}<br><small>请确认 Actions 已成功运行并生成 data.json</small></div>`;
+      }
+    }
+
+    function buildFilters() {
+      const sources = Object.keys(hotData.sources || {});
+      const sourceNames = { weibo: "微博", douyin: "抖音", zhihu: "知乎", toutiao: "头条", baidu: "百度" };
+      let html = `<button class="filter-btn active" data-src="all" onclick="setSource('all')">全部</button>`;
+      sources.forEach(s => {
+        html += `<button class="filter-btn" data-src="${s}" onclick="setSource('${s}')">${sourceNames[s] || s}</button>`;
+      });
+      document.getElementById("sourceFilters").innerHTML = html;
+
+      const cats = ["全部", "社会", "科技", "民生", "AI", "其他"];
+      let chtml = "";
+      cats.forEach(c => {
+        const val = c === "全部" ? "all" : c;
+        chtml += `<button class="filter-btn${val === "all" ? " active" : ""}" data-cat="${val}" onclick="setCat('${val}')">${c}</button>`;
+      });
+      document.getElementById("catFilters").innerHTML = chtml;
+    }
+
+    function setSource(s) {
+      currentSource = s;
+      document.querySelectorAll("#sourceFilters .filter-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.src === s);
+      });
+      renderList();
+    }
+
+    function setCat(c) {
+      currentCat = c;
+      document.querySelectorAll("#catFilters .filter-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.cat === c);
+      });
+      renderList();
+    }
+
+    function renderList() {
+      let items = hotData.items || [];
+      if (currentSource !== "all") items = items.filter(i => i.source === currentSource);
+      if (currentCat !== "all") items = items.filter(i => i.category === currentCat);
+
+      if (!items.length) {
+        document.getElementById("hotList").innerHTML = `<div class="empty-state"><div class="emoji">🔍</div>当前筛选下暂无热点</div>`;
+        return;
+      }
+
+      const rankClass = r => r === 1 ? "top1" : r === 2 ? "top2" : r === 3 ? "top3" : "";
+      let html = "";
+      items.forEach(it => {
+        const link = it.url || "#";
+        html += `
+          <div class="card">
+            <div class="card-top">
+              <div class="rank ${rankClass(it.rank)}">${it.rank}</div>
+              <div class="card-body">
+                <div class="card-title">${escapeHtml(it.title)}</div>
+                <div class="card-meta">
+                  <span class="badge badge-${it.category}">${it.category}</span>
+                  <span>${it.source_name}</span>
+                  ${it.hot ? `<span>🔥 ${it.hot}</span>` : ""}
+                </div>
+              </div>
+            </div>
+            <div class="card-actions">
+              <a class="btn btn-secondary" href="${link}" target="_blank" rel="noopener" style="text-align:center;text-decoration:none;">查看热议原帖</a>
+              <button class="btn btn-primary" onclick="useTopic('${escapeAttr(it.title)}')">写文案</button>
+            </div>
+          </div>`;
+      });
+      document.getElementById("hotList").innerHTML = html;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+    function escapeAttr(s) {
+      return String(s).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+    }
+
+    function useTopic(title) {
+      document.getElementById("topicTitle").value = title;
+      document.querySelector('.tab[data-panel="copy"]').click();
+      toast("已填入标题，可以生成文案了");
+    }
+
+    function fillTopicSelect() {
+      const sel = document.getElementById("topicSelect");
+      sel.innerHTML = '<option value="">-- 从今日热点选择 --</option>';
+      (hotData.items || []).slice(0, 40).forEach(it => {
+        const opt = document.createElement("option");
+        opt.value = it.title;
+        opt.textContent = `[${it.source_name}] ${it.title.slice(0, 36)}`;
+        sel.appendChild(opt);
+      });
+      sel.onchange = () => {
+        if (sel.value) document.getElementById("topicTitle").value = sel.value;
+      };
+    }
+
+    // ========== 文案生成 ==========
+    const KEY_STORAGE = "ds_api_key";
+
+    function loadKey() {
+      const k = localStorage.getItem(KEY_STORAGE) || "";
+      document.getElementById("apiKey").value = k;
+      updateKeyStatus(k);
+    }
+    document.getElementById("apiKey").addEventListener("input", e => {
+      const v = e.target.value.trim();
+      localStorage.setItem(KEY_STORAGE, v);
+      updateKeyStatus(v);
+    });
+    function updateKeyStatus(k) {
+      const el = document.getElementById("keyStatus");
+      if (k && k.startsWith("sk-")) {
+        el.textContent = "Key 已保存（仅本机）";
+        el.className = "key-status ok";
+      } else {
+        el.textContent = "未填写有效 Key";
+        el.className = "key-status no";
+      }
+    }
+
+    async function generateCopy() {
+      const key = document.getElementById("apiKey").value.trim();
+      const title = document.getElementById("topicTitle").value.trim();
+      const ref = document.getElementById("refText").value.trim();
+      const platform = document.getElementById("platform").value;
+
+      if (!key) { toast("请先填写 DeepSeek API Key"); return; }
+      if (!title) { toast("请填写话题标题"); return; }
+
+      const btn = document.getElementById("genBtn");
+      btn.disabled = true;
+      btn.textContent = "生成中...";
+      const box = document.getElementById("resultBox");
+      box.classList.remove("empty");
+      box.textContent = "正在调用 DeepSeek，请稍候...";
+
+      const platformHint = {
+        all: "请分别生成【今日头条】【小红书】【抖音】三个平台的文案，用清晰标题分隔。",
+        toutiao: "只生成【今日头条】文案。",
+        xiaohongshu: "只生成【小红书】文案。",
+        douyin: "只生成【抖音】文案。"
+      };
+
+      const systemPrompt = `你是一位资深中文自媒体操盘手，文风接地气、口语化、有网感，坚决反对 AI 味空话套话。
+要求：
+1. 完全原创重写，禁止照抄参考原文任何句子。
+2. 今日头条：标题党但不低俗，正文 300-600 字，有观点有细节。
+3. 小红书：标题带 emoji，正文轻松种草感，分段清晰，可加标签。
+4. 抖音：短视频口播稿，口语化，节奏快，控制在 150 字内，适合 30-60 秒。
+5. 输出格式清晰，方便直接复制使用。`;
+
+      let userPrompt = `话题：${title}\n${platformHint[platform]}`;
+      if (ref) userPrompt += `\n\n参考原文（仅作信息参考，必须完全重写）：\n${ref.slice(0, 2000)}`;
+
+      try {
+        const resp = await fetch("https://api.deepseek.com/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + key
+          },
+          body: JSON.stringify({
+            model: "deepseek-chat",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+            temperature: 0.85,
+            max_tokens: 2000
+          })
+        });
+        if (!resp.ok) {
+          const err = await resp.text();
+          throw new Error("API 错误 " + resp.status + ": " + err.slice(0, 200));
+        }
+        const data = await resp.json();
+        const text = data.choices?.[0]?.message?.content || "无返回内容";
+        box.textContent = text;
+        document.getElementById("copyBtn").style.display = "block";
+      } catch (e) {
+        box.textContent = "生成失败：\n" + e.message;
+        toast("生成失败，请检查 Key 或网络");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "✨ 生成文案";
+      }
+    }
+
+    function copyResult() {
+      const text = document.getElementById("resultBox").textContent;
+      navigator.clipboard.writeText(text).then(() => toast("已复制到剪贴板")).catch(() => toast("复制失败，请手动长按复制"));
+    }
+
+    // ========== 素材 ==========
+    const MAT_KEY = "hot_materials";
+
+    function loadMaterials() {
+      const list = JSON.parse(localStorage.getItem(MAT_KEY) || "[]");
+      const box = document.getElementById("matList");
+      if (!list.length) {
+        box.innerHTML = `<div class="empty-state"><div class="emoji">📝</div>还没有素材，先记一条灵感吧</div>`;
+        return;
+      }
+      box.innerHTML = list.map((m, i) => `
+        <div class="material-item">
+          <button class="del" onclick="delMaterial(${i})">✕</button>
+          <div style="font-weight:600;margin-bottom:4px;padding-right:24px;">${escapeHtml(m.title)}</div>
+          <div style="font-size:13px;color:var(--text-secondary);white-space:pre-wrap;">${escapeHtml(m.note || "")}</div>
+          <div style="font-size:11px;color:#64748b;margin-top:6px;">${m.time || ""}</div>
+        </div>
+      `).join("");
+    }
+
+    function addMaterial() {
+      const title = document.getElementById("matTitle").value.trim();
+      const note = document.getElementById("matNote").value.trim();
+      if (!title) { toast("请填写标题"); return; }
+      const list = JSON.parse(localStorage.getItem(MAT_KEY) || "[]");
+      list.unshift({
+        title, note,
+        time: new Date().toLocaleString("zh-CN", { hour12: false })
+      });
+      localStorage.setItem(MAT_KEY, JSON.stringify(list));
+      document.getElementById("matTitle").value = "";
+      document.getElementById("matNote").value = "";
+      loadMaterials();
+      toast("已添加");
+    }
+
+    function delMaterial(i) {
+      const list = JSON.parse(localStorage.getItem(MAT_KEY) || "[]");
+      list.splice(i, 1);
+      localStorage.setItem(MAT_KEY, JSON.stringify(list));
+      loadMaterials();
+    }
+
+    // ========== 初始化 ==========
+    loadKey();
+    loadMaterials();
+    loadHot();
+  </script>
+</body>
+</html>
