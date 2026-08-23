@@ -282,14 +282,14 @@
 
     function buildFilters() {
       const sources = Object.keys(hotData.sources || {});
-      const sourceNames = { weibo: "微博", douyin: "抖音", zhihu: "知乎", toutiao: "头条" };
+     const sourceNames = { weibo: "微博", douyin: "抖音", zhihu: "知乎", toutiao: "头条", baidu: "百度" };
       let html = `<button class="filter-btn active" data-src="all" onclick="setSource('all')">全部</button>`;
       sources.forEach(s => {
         html += `<button class="filter-btn" data-src="${s}" onclick="setSource('${s}')">${sourceNames[s] || s}</button>`;
       });
       document.getElementById("sourceFilters").innerHTML = html;
 
-      const cats = ["全部", "社会", "娱乐", "情感", "科技", "财经", "时政", "民生", "搞笑", "其他"];
+      const cats = ["全部", "社会", "科技", "民生", "AI", "其他"];
       let chtml = "";
       cats.forEach(c => {
         const val = c === "全部" ? "all" : c;
