@@ -94,6 +94,8 @@ body {
 .badge-科技 { background: #1e3a5f; color: #7dd3fc; }
 .badge-民生 { background: #164e63; color: #a5f3fc; }
 .badge-AI { background: #312e81; color: #a5b4fc; }
+.badge-社会 { background: #7c2d12; color: #fdba74; }
+.badge-其他 { background: #374151; color: #d1d5db; }
 .card-actions { margin-top: 10px; display: flex; gap: 8px; }
 .btn {
   flex: 1; padding: 8px 0; border-radius: 8px; border: none;
@@ -268,11 +270,15 @@ function buildFilters() {
   });
   document.getElementById("sourceFilters").innerHTML = html;
 
-  const cats = ["全部", "科技", "民生", "AI"];
-  let chtml = "";
+  // 分类按钮根据实际抓到的数据动态生成，不再写死限定范围
+  const catSet = new Set();
+  (hotData.items || []).forEach(it => catSet.add(it.category || "其他"));
+  const catOrder = ["AI", "科技", "民生", "社会", "其他"];
+  const cats = catOrder.filter(c => catSet.has(c)).concat([...catSet].filter(c => !catOrder.includes(c)));
+
+  let chtml = `<button class="filter-btn active" data-cat="all" onclick="setCat('all')">全部</button>`;
   cats.forEach(c => {
-    const val = c === "全部" ? "all" : c;
-    chtml += `<button class="filter-btn${val === "all" ? " active" : ""}" data-cat="${val}" onclick="setCat('${val}')">${c}</button>`;
+    chtml += `<button class="filter-btn" data-cat="${c}" onclick="setCat('${c}')">${c}</button>`;
   });
   document.getElementById("catFilters").innerHTML = chtml;
 }
@@ -297,8 +303,6 @@ function renderList() {
   let items = hotData.items || [];
   if (currentSource !== "all") items = items.filter(i => i.source === currentSource);
   if (currentCat !== "all") items = items.filter(i => i.category === currentCat);
-  // 只保留 科技 / 民生 / AI
-  items = items.filter(i => i.category === "科技" || i.category === "民生" || i.category === "AI");
 
   if (!items.length) {
     document.getElementById("hotList").innerHTML = `<div class="empty-state"><div class="emoji">🔍</div>当前筛选下暂无热点</div>`;
@@ -349,8 +353,7 @@ function fillTopicSelect() {
   const sel = document.getElementById("topicSelect");
   sel.innerHTML = '<option value="">-- 从今日热点选择 --</option>';
   (hotData.items || [])
-    .filter(it => it.category === "科技" || it.category === "民生" || it.category === "AI")
-    .slice(0, 40)
+    .slice(0, 60)
     .forEach(it => {
       const opt = document.createElement("option");
       opt.value = it.title;
@@ -408,13 +411,25 @@ async function generateCopy() {
     douyin: "只生成【抖音】文案。"
   };
 
-  const systemPrompt = `你是一位资深中文自媒体操盘手，文风接地气、口语化、有网感，坚决反对 AI 味空话套话。
+  const systemPrompt = `你是一个普通老百姓，刷到热点随手写两句感想发到网上，不是记者也不是官方账号，坚决反对新闻通稿味、公文腔、AI 味空话套话。
+
+严禁出现的写法（一旦出现视为失败）：
+- 禁止用"正文：""一、二、三、""政策背景""操作流程""保障措施""家属反响""未来展望"这类新闻通稿式小标题和加粗分段
+- 禁止"据悉""业内人士透露""不少网友表示"这类通稿腔调
+- 禁止像在总结文件、写报告，要像在跟朋友唠嗑、发朋友圈、吐槽
+
+正确的语气参考：
+- 开头直接说人话，比如"刚刷到个事儿""我天，这也行？""说说我的看法"
+- 多用短句、口语词、语气词（比如"说实话""讲真""你别说""我寻思"）
+- 可以带点个人情绪、吐槽、反问，允许不客观、有立场
+- 分段自然，不用编号小标题，就是一段一段往下唠
+
 要求：
-1. 完全原创重写，禁止照抄参考原文任何句子。
-2. 今日头条：标题党但不低俗，正文 300-600 字，有观点有细节。
-3. 小红书：标题带 emoji，正文轻松种草感，分段清晰，可加标签。
-4. 抖音：短视频口播稿，口语化，节奏快，控制在 150 字内，适合 30-60 秒。
-5. 输出格式清晰，方便直接复制使用。`;
+1. 完全原创重写，禁止照抄参考原文任何句子，也不能是新闻通稿的同义替换。
+2. 今日头条：标题抓眼球但别低俗，正文 300-500 字，像本地大爷大妈在唠家常，有观点有细节。
+3. 小红书：标题带 emoji，语气软萌种草或吐槽，分段自然，可加话题标签。
+4. 抖音：口播稿，短句为主，节奏快带点抖包袱，控制在 150 字内，适合 30-60 秒。
+5. 输出格式清晰分平台，方便直接复制使用，但平台内部不要用编号小标题。`;
 
   let userPrompt = `话题：${title}\n${platformHint[platform]}`;
   if (ref) userPrompt += `\n\n参考原文（仅作信息参考，必须完全重写）：\n${ref.slice(0, 2000)}`;
